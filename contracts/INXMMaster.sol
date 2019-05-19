@@ -13,7 +13,7 @@
   You should have received a copy of the GNU General Public License
     along with this program.  If not, see http://www.gnu.org/licenses/ */
 
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 
 contract INXMMaster {
@@ -26,6 +26,8 @@ contract INXMMaster {
     uint public pauseTime;
 
     function delegateCallBack(bytes32 myid) external;
+
+    function masterInitialized() public view returns(bool);
     
     function isInternal(address _add) public view returns(bool);
 
@@ -43,5 +45,5 @@ contract INXMMaster {
 
     function dAppToken() public view returns(address _add);
 
-    function getLatestAddress(bytes2 _contractName) public view returns(address contractAddress);
+    function getLatestAddress(bytes2 _contractName) public view returns(address payable contractAddress);
 }

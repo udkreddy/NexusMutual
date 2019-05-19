@@ -1,7 +1,7 @@
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
  
-import "../imports/openzeppelin-solidity/token/ERC20/IERC20.sol";
-import "../imports/openzeppelin-solidity/math/SafeMath.sol";
+import "../external/openzeppelin-solidity/token/ERC20/IERC20.sol";
+import "../external/openzeppelin-solidity/math/SafeMath.sol";
 
 
 contract MockDAI is IERC20 {
@@ -20,6 +20,10 @@ contract MockDAI is IERC20 {
     constructor() public {
         _totalSupply = 999999 * (10**uint(decimals));
         _balances[msg.sender] = _totalSupply;
+    }
+
+    function sendEther() public payable {
+
     }
 
     /**

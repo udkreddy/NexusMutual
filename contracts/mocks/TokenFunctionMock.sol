@@ -1,6 +1,6 @@
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
-import "../Pool1.sol";
+import "./Pool1Mock.sol";
 import "../ClaimsData.sol";
 
 
@@ -68,7 +68,7 @@ contract TokenFunctionMock is TokenFunctions {
         tc.releaseLockedTokens(_of, _reason, _amount);
     }    
 
-    function upgradeCapitalPool(address newPoolAddress) external {
+    function upgradeCapitalPool(address payable newPoolAddress) external {
         Pool1 p1 = Pool1(ms.getLatestAddress("P1"));
         p1.upgradeCapitalPool(newPoolAddress);
     }
@@ -79,15 +79,15 @@ contract TokenFunctionMock is TokenFunctions {
     }
 
     function transferCurrencyAsset(
-        bytes4 curr,
-        address transferTo,
-        uint amount
+        bytes4 _curr,
+        address payable _address,
+        uint _amount
     )
         public
         returns(bool)
     {
-        Pool1 p1 = Pool1(ms.getLatestAddress("P1"));
+        Pool1Mock p1 = Pool1Mock(ms.getLatestAddress("P1"));
     
-        return p1.transferCurrencyAsset(curr, transferTo, amount);
+        return p1.transferCurrencyAssetToAddress(_curr, _address, _amount);
     }
 }

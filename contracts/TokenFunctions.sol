@@ -13,7 +13,7 @@
   You should have received a copy of the GNU General Public License
     along with this program.  If not, see http://www.gnu.org/licenses/ */
 
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 import "./NXMToken.sol";
 import "./Governance.sol";
@@ -136,7 +136,8 @@ contract TokenFunctions is Iupgradable {
     {
         uint stakedAmount = 0;
         address stakerAddress;
-        for (uint i = 0; i < td.getStakedContractStakersLength(_stakedContractAddress); i++) {
+        uint staketLen = td.getStakedContractStakersLength(_stakedContractAddress);
+        for (uint i = 0; i < staketLen; i++) {
             stakerAddress = td.getStakedContractStakerByIndex(_stakedContractAddress, i);
             uint stakerIndex = td.getStakedContractStakerIndex(
             _stakedContractAddress, i);

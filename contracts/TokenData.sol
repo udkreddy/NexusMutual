@@ -13,16 +13,16 @@
   You should have received a copy of the GNU General Public License
     along with this program.  If not, see http://www.gnu.org/licenses/ */
     
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 import "./Iupgradable.sol";
-import "./imports/openzeppelin-solidity/math/SafeMath.sol";
+import "./external/openzeppelin-solidity/math/SafeMath.sol";
 
 
 contract TokenData is Iupgradable {
     using SafeMath for uint;
 
-    address public walletAddress;
+    address payable public walletAddress;
     uint public lockTokenTimeAfterCoverExp;
     uint public bookTime;
     uint public lockCADays;
@@ -107,7 +107,7 @@ contract TokenData is Iupgradable {
         uint commissionAmount
     );
 
-    constructor(address _walletAdd) public {
+    constructor(address payable _walletAdd) public {
         walletAddress = _walletAdd;
         bookTime = 12 hours;
         joiningFee = 2000000000000000; // 0.002 Ether
@@ -125,7 +125,7 @@ contract TokenData is Iupgradable {
     /**
      * @dev Change the wallet address which receive Joining Fee
      */
-    function changeWalletAddress(address _address) external onlyInternal {
+    function changeWalletAddress(address payable _address) external onlyInternal {
         walletAddress = _address;
     }
 

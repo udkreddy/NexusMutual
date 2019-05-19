@@ -1,4 +1,4 @@
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 import "./INXMMaster.sol";
 
@@ -44,7 +44,7 @@ contract Iupgradable {
      */
     function changeMasterAddress(address _masterAddress) public {
         if (address(ms) != address(0)) {
-            require(ms.isInternal(msg.sender), "Not internal");
+            require(address(ms) == msg.sender, "Not master");
         }
         ms = INXMMaster(_masterAddress);
         nxMasterAddress = _masterAddress;

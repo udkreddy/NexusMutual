@@ -13,7 +13,7 @@
   You should have received a copy of the GNU General Public License
     along with this program.  If not, see http://www.gnu.org/licenses/ */
 
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 import "./PoolData.sol";
 import "./QuotationData.sol";
@@ -21,6 +21,7 @@ import "./TokenData.sol";
 import "./NXMToken.sol";
 import "./Pool1.sol";
 import "./MemberRoles.sol";
+import "./ProposalCategory.sol";
 
 
 contract MCR is Iupgradable {
@@ -32,6 +33,7 @@ contract MCR is Iupgradable {
     QuotationData internal qd;
     MemberRoles internal mr;
     TokenData internal td;
+    ProposalCategory internal proposalCategory;
 
     uint private constant DECIMAL1E18 = uint(10) ** 18;
     uint private constant DECIMAL1E05 = uint(10) ** 5;
@@ -57,13 +59,14 @@ contract MCR is Iupgradable {
         uint mcrP,
         uint mcrE,
         uint vF,
-        bytes4[] curr,
-        uint[] _threeDayAvg,
+        bytes4[] calldata curr,
+        uint[] calldata _threeDayAvg,
         uint64 onlyDate
     )
         external
         checkPause
     {
+        require(proposalCategory.constructorCheck());
         require(pd.isnotarise(msg.sender));
         uint _days = (uint(now).sub(mr.launchedOn())).div(1 days);
         if (mr.launched() && pd.capReached() != 1 && _days <= 30) {
@@ -112,6 +115,7 @@ contract MCR is Iupgradable {
         tk = NXMToken(ms.tokenAddress());
         mr = MemberRoles(ms.getLatestAddress("MR"));
         td = TokenData(ms.getLatestAddress("TD"));
+        proposalCategory = ProposalCategory(ms.getLatestAddress("PC"));
     }
 
     /** 
@@ -200,9 +204,11 @@ contract MCR is Iupgradable {
      */ 
     function getMaxSellTokens() public view returns(uint maxTokens) {
         uint baseMin = pd.getCurrencyAssetBaseMin("ETH");
-        if (address(p1).balance > baseMin.mul(50).div(100))
-            uint maxTokensAccPoolBal  = address(p1).balance.sub(
+        uint maxTokensAccPoolBal;
+        if (address(p1).balance > baseMin.mul(50).div(100)) {
+            maxTokensAccPoolBal = address(p1).balance.sub(
             (baseMin.mul(50)).div(100));        
+        }
         maxTokensAccPoolBal = (maxTokensAccPoolBal.mul(DECIMAL1E18)).div(
             (calculateTokenPrice("ETH").mul(975)).div(1000));
         uint lastMCRPerc = pd.getLastMCRPerc();
@@ -257,11 +263,11 @@ contract MCR is Iupgradable {
     function _addMCRData(
         uint len,
         uint64 newMCRDate,
-        bytes4[] curr,
+        bytes4[] memory curr,
         uint mcrE,
         uint mcrP,
         uint vF,
-        uint[] _threeDayAvg
+        uint[] memory _threeDayAvg
     ) 
         internal
     {

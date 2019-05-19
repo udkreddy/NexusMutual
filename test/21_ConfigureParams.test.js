@@ -1,8 +1,8 @@
-const Governance = artifacts.require('GovernanceMock');
+const Governance = artifacts.require('Governance');
 const ProposalCategory = artifacts.require('ProposalCategory');
 const MemberRoles = artifacts.require('MemberRoles');
 const NXMaster = artifacts.require('NXMaster');
-const PoolData = artifacts.require('PoolData');
+const PoolData = artifacts.require('PoolDataMock');
 const ClaimsReward = artifacts.require('ClaimsReward');
 const TokenController = artifacts.require('TokenController');
 const TokenData = artifacts.require('TokenDataMock');
@@ -10,6 +10,7 @@ const NXMToken = artifacts.require('NXMToken');
 const QuotationData = artifacts.require('QuotationDataMock');
 const DAI = artifacts.require('MockDAI');
 const ClaimsData = artifacts.require('ClaimsData');
+const Pool1 = artifacts.require('Pool1Mock');
 const FactoryMock = artifacts.require('FactoryMock');
 const expectEvent = require('./utils/expectEvent');
 const assertRevert = require('./utils/assertRevert.js').assertRevert;
@@ -18,6 +19,9 @@ const gvProposal = require('./utils/gvProposal.js').gvProposal;
 const encode = require('./utils/encoder.js').encode;
 const AdvisoryBoard = '0x41420000';
 const TokenFunctions = artifacts.require('TokenFunctionMock');
+const Web3 = require('web3');
+const web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:8545')); // Hardcoded development port
+const { toWei } = require('./utils/ethTools');
 
 let tf;
 let gv;
@@ -29,6 +33,7 @@ let pd;
 let td;
 let qd;
 let cd;
+let p1;
 let nxms;
 let proposalId;
 let pId;
@@ -50,31 +55,34 @@ contract(
       tf = await TokenFunctions.deployed();
       cr = await ClaimsReward.deployed();
       nxmToken = await NXMToken.deployed();
-      let address = await nxms.getLatestAddress('GV');
+      let address = await nxms.getLatestAddress('0x4756');
       gv = await Governance.at(address);
-      address = await nxms.getLatestAddress('PC');
+      address = await nxms.getLatestAddress('0x5043');
       pc = await ProposalCategory.at(address);
-      address = await nxms.getLatestAddress('MR');
+      address = await nxms.getLatestAddress('0x4d52');
       mr = await MemberRoles.at(address);
-      tc = await TokenController.at(await nxms.getLatestAddress('TC'));
+      tc = await TokenController.at(await nxms.getLatestAddress('0x5443'));
       pd = await PoolData.deployed();
+      p1 = await Pool1.deployed();
       td = await TokenData.deployed();
       qd = await QuotationData.deployed();
       cd = await ClaimsData.deployed();
+      // await p1.sendEther({value:10});
+      // console.log(await test.variable());
       await nxmToken.approve(tc.address, maxAllowance);
-      let bal = await nxmToken.balanceOf(ab1);
+      // await pc.payMe({
+      //     value:"10",
+      //     // from: web3.eth.accounts[1]
+      //   });
+      // let bal = await nxmToken.balanceOf(ab1);
       await nxmToken.approve(cr.address, maxAllowance, {
-        from: web3.eth.accounts[0]
+        from: ab1
       });
-      // await mr.payJoiningFee(web3.eth.accounts[0], {
-      //   value: 2000000000000000,
-      //   from: web3.eth.accounts[0]
-      // });
       // await mr.kycVerdict(web3.eth.accounts[0], true, {
       //   from: web3.eth.accounts[0]
       // });
       // await nxmToken.transfer(notMember, 267600*1e18);
-      let balances = [150000, 150000, 150000, 150000];
+      let balances = ['15000', '15000', '15000', '15000'];
       for (let i = 1; i < 4; i++) {
         await nxmToken.approve(cr.address, maxAllowance, {
           from: web3.eth.accounts[i]
@@ -84,9 +92,9 @@ contract(
           from: web3.eth.accounts[i]
         });
         await mr.kycVerdict(web3.eth.accounts[i], true, {
-          from: web3.eth.accounts[0]
+          from: ab1
         });
-        await nxmToken.transfer(web3.eth.accounts[i], balances[i] * 1e18);
+        await nxmToken.transfer(web3.eth.accounts[i], toWei(balances[i]));
       }
     });
     async function updateParameter(
@@ -97,6 +105,7 @@ contract(
       type,
       proposedValue
     ) {
+      code = web3.toHex(code);
       let getterFunction;
       if (type == 'uint') {
         action = 'updateUintParameters(bytes8,uint)';
@@ -111,7 +120,7 @@ contract(
       // console.log(proposedValue);
       let actionHash = encode(action, code, proposedValue);
       await gvProposal(cId, actionHash, mr, gv, mrSequence);
-      if (code == 'MASTADD') {
+      if (code == web3.toHex('MASTADD')) {
         let newMaster = await NXMaster.at(proposedValue);
         contractInst = newMaster;
       }
@@ -119,7 +128,12 @@ contract(
       try {
         parameter[1] = parameter[1].toNumber();
       } catch (err) {}
-      assert.equal(parameter[1], proposedValue);
+      if (type == 'address') {
+        assert.equal(
+          web3.toChecksumAddress(parameter[1]),
+          web3.toChecksumAddress(proposedValue)
+        );
+      }
     }
     async function updateInvalidParameter(
       cId,
@@ -129,6 +143,7 @@ contract(
       type,
       proposedValue
     ) {
+      code = web3.toHex(code);
       let getterFunction;
       if (type == 'uint') {
         action = 'updateUintParameters(bytes8,uint)';
@@ -142,7 +157,7 @@ contract(
       }
       let actionHash = encode(action, code, proposedValue);
       await gvProposal(cId, actionHash, mr, gv, mrSequence);
-      if (code == 'MASTADD' && proposedValue != ZERO_ADDRESS) {
+      if (code == web3.toHex('MASTADD') && proposedValue != ZERO_ADDRESS) {
         let newMaster = await NXMaster.at(proposedValue);
         contractInst = newMaster;
       }
@@ -198,6 +213,9 @@ contract(
       });
       it('Should update Max Followers limit', async function() {
         await updateParameter(22, 2, 'MAXFOL', gv, 'uint', '10');
+      });
+      it('Should update Max Draft time limit', async function() {
+        await updateParameter(22, 2, 'MAXDRFT', gv, 'uint', '86400');
       });
       it('Should update Max Advisory Board Members', async function() {
         await updateParameter(22, 2, 'MAXAB', gv, 'uint', '10');
@@ -301,7 +319,7 @@ contract(
       it('Should update Factor A', async function() {
         await updateParameter(26, 2, 'A', pd, 'uint', '40');
       });
-      it('Should update Factor A', async function() {
+      it('Should not update Factor A', async function() {
         await updateInvalidParameter(26, 2, 'Z', pd, 'uint', '40');
       });
     });
@@ -309,14 +327,12 @@ contract(
     describe('Update Address Parameters', function() {
       it('Should update Master Contract Address', async function() {
         let newMaster = await NXMaster.new(nxmToken.address);
-        addressCon = await nxms.getVersionData(await nxms.getCurrentVersion());
-        addressIncorrect = await nxms.getVersionData(
-          await nxms.getCurrentVersion()
-        );
-        addressIncorrect[2][0] = ZERO_ADDRESS;
-        await assertRevert(newMaster.addNewVersion(addressIncorrect[2]));
+         addressCon = await nxms.getVersionData();
+        addressIncorrect = await nxms.getVersionData();
+        addressIncorrect[1][0] = ZERO_ADDRESS;
+        await assertRevert(newMaster.addNewVersion(addressIncorrect[1]));
         await assertRevert(newMaster.addNewVersion([]));
-        await newMaster.addNewVersion(addressCon[2]);
+        await newMaster.addNewVersion(addressCon[1]);
         await updateParameter(
           27,
           2,

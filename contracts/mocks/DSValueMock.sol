@@ -1,4 +1,4 @@
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 
 contract DSValueMock {
@@ -6,7 +6,8 @@ contract DSValueMock {
     bytes32 public p;
 
     constructor() public {
-        p = bytes32(120000000000000000000);
+        uint val = 120 * 10**18;
+        p = bytes32(val);
     }
 
     function read() public view returns (bytes32) {

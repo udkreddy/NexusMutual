@@ -11,11 +11,11 @@ const TokenController = artifacts.require('TokenController');
 const TokenData = artifacts.require('TokenDataMock');
 const Pool1 = artifacts.require('Pool1Mock');
 const Pool2 = artifacts.require('Pool2');
-const PoolData = artifacts.require('PoolData');
+const PoolData = artifacts.require('PoolDataMock');
 const Quotation = artifacts.require('Quotation');
 const QuotationDataMock = artifacts.require('QuotationDataMock');
 const MemberRoles = artifacts.require('MemberRoles');
-const Governance = artifacts.require('GovernanceMock');
+const Governance = artifacts.require('Governance');
 const ProposalCategory = artifacts.require('ProposalCategory');
 const FactoryMock = artifacts.require('FactoryMock');
 
@@ -23,7 +23,7 @@ const QE = '0xb24919181daead6635e613576ca11c5aa5a4e133';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const Exchange_0x = web3.eth.accounts[17];
 
-const { ether } = require('./utils/ether');
+const { ether, toHex, toWei } = require('./utils/ethTools');
 const { assertRevert } = require('./utils/assertRevert');
 const gvProp = require('./utils/gvProposal.js').gvProposal;
 const encode = require('./utils/encoder.js').encode;
@@ -67,11 +67,12 @@ contract('NXMaster', function([
   govVoter3,
   govVoter4
 ]) {
-  const fee = ether(0.002);
+  // const fee = ether(0.002);
+  const fee = toWei(0.002);
   const poolEther = ether(2);
   const founderAddress = web3.eth.accounts[19];
   const INITIAL_SUPPLY = ether(1500000);
-  const pauseTime = new BigNumber(2419200);
+  const pauseTime = new web3.utils.BN(2419200);
 
   before(async function() {
     let dsv = await DSValue.deployed();
@@ -93,9 +94,15 @@ contract('NXMaster', function([
     dai = await DAI.deployed();
     propCat = await ProposalCategory.new();
     memberRoles = await MemberRoles.new();
-    let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
+    let oldMR = await MemberRoles.at(await nxms.getLatestAddress(toHex('MR')));
     let oldTk = await NXMToken.deployed();
-    let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+    let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
+
+    const Web3 = require('web3');
+    const web3 = new Web3(
+      new Web3.providers.HttpProvider('http://localhost:8545')
+    );
+
     addr.push(qd.address);
     addr.push(td.address);
     addr.push(cd.address);
@@ -125,21 +132,15 @@ contract('NXMaster', function([
       let isMember = await nxms.isMember(web3.eth.accounts[itr]);
       isMember.should.equal(true);
 
-      await oldTk.transfer(web3.eth.accounts[itr], 375000000000000000000000);
+      await oldTk.transfer(web3.eth.accounts[itr], toWei(37500));
     }
   });
   describe('Updating state', function() {
-    // it('1.2 should be able to change master address', async function() {
-    //   this.timeout(0);
-    //   newMaster = await NXMaster.new(nxmtk.address);
-    //   await nxms.changeMasterAddress(newMaster.address, { from: owner });
-    //   // await newMaster.changeTokenAddress(nxmtk.address);
-    //   addr[12] = await nxms.getLatestAddress('GV');
-    //   addr[13] = await nxms.getLatestAddress('PC');
-    //   addr[14] = await nxms.getLatestAddress('MR');
-    //   await newMaster.addNewVersion(addr);
-    //   nxms = newMaster;
-    // });
+
+    it('1.2 should not be able to change master address if master has not initialized', async function() {
+      let newMaster = await NXMaster.new(nxmtk.address);
+      await assertRevert(nxms.changeMasterAddress(newMaster.address));
+    });
 
     it('1.3 should be able to change single contract (proxy contracts)', async function() {
       this.timeout(0);
@@ -149,11 +150,13 @@ contract('NXMaster', function([
         'MR',
         newMemberRoles.address
       );
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       // await oldGv.changeDependentContractAddress();
       await gvProp(5, actionHash, oldMR, oldGv, 1);
-      (await qd.getImplementationAdd('MR')).should.be.equal(
+      (await qd.getImplementationAdd(toHex('MR'))).should.be.equal(
         newMemberRoles.address
       );
       memberRoles = newMemberRoles;
@@ -168,9 +171,11 @@ contract('NXMaster', function([
 
     it('1.5 should be able to reinitialize', async function() {
       this.timeout(0);
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
-      await pl1.sendTransaction({ from: owner, value: poolEther });
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
+      await pl1.sendEther({ from: owner, value: poolEther });
       let actionHash = encode(
         'updateOwnerParameters(bytes8,address)',
         'OWNER',
@@ -199,8 +204,12 @@ contract('NXMaster', function([
         QE
       );
       await gvProp(28, actionHash, oldMR, oldGv, 3);
-      (await qd.authQuoteEngine()).should.be.equal(QE);
+      let qeAdd = await qd.authQuoteEngine();
+      let qeAdd1 = web3.utils.toChecksumAddress(qeAdd);
+      let qeAdd2 = web3.utils.toChecksumAddress(QE);
+      let assertion = qeAdd2 == qeAdd1;
 
+      assertion.should.equal(true);
       // await pd.changeCurrencyAssetAddress('0x444149', dai.address);
       // await pd.changeInvestmentAssetAddress('0x444149', dai.address);
       actionHash = encode(
@@ -209,7 +218,7 @@ contract('NXMaster', function([
         QE
       );
       await gvProp(28, actionHash, oldMR, oldGv, 3);
-      (await pd.notariseMCR()).should.be.equal(QE);
+      (await pd.notariseMCR()).should.be.equal(qeAdd2);
 
       actionHash = encode(
         'updateOwnerParameters(bytes8,address)',
@@ -220,8 +229,8 @@ contract('NXMaster', function([
       (await pd.notariseMCR()).should.be.equal(owner);
       await mcr.addMCRData(
         18000,
-        100 * 1e18,
-        2 * 1e18,
+        toWei(100),
+        toWei(2),
         ['0x455448', '0x444149'],
         [100, 15517],
         20190103
@@ -293,7 +302,7 @@ contract('NXMaster', function([
   describe('emergency pause ', function() {
     it('1.19 should return zero length for Emergency Pause', async function() {
       const len = await nxms.getEmergencyPausedLength();
-      len.should.be.bignumber.equal(new BigNumber(0));
+      len.toString().should.be.equal(new web3.utils.BN(0).toString());
     });
     it('1.20 should return correct for last Emergency Pause', async function() {
       let check = false;
@@ -304,23 +313,27 @@ contract('NXMaster', function([
 
     it('1.21 should return correct pasue time detail', async function() {
       const getPauseTime = await nxms.getPauseTime();
-      pauseTime.should.be.bignumber.equal(getPauseTime);
+      pauseTime.toString().should.be.equal(getPauseTime.toString());
     });
 
     it('1.22 other address/contract should not be able to update pauseTime', async function() {
-      const updatePauseTime = pauseTime.plus(new BigNumber(60));
+      // const updatePauseTime = pauseTime.addn(new web3.utils.BN(60));
+      const updatePauseTime = pauseTime.toNumber() + 60;
       await assertRevert(
         nxms.updatePauseTime(updatePauseTime, { from: newOwner })
       );
-      updatePauseTime.should.be.bignumber.not.equal(await nxms.getPauseTime());
+      let pauseTime1 = await nxms.getPauseTime();
+      updatePauseTime.should.be.not.equal(pauseTime1.toNumber());
     });
 
     it('1.23 governance call should be able to update pauseTime', async function() {
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       actionHash = encode('updateUintParameters(bytes8,uint)', 'EPTIME', 12);
       await gvProp(22, actionHash, oldMR, oldGv, 2);
-      let val = await oldGv.getUintParameters('EPTIME');
+      let val = await oldGv.getUintParameters(toHex('EPTIME'));
       (val[1] / 1).should.be.equal(12);
     });
   });
@@ -328,80 +341,96 @@ contract('NXMaster', function([
   describe('upgrade single non-proxy contracts', function() {
     it('1.24 should able to propose new contract code for quotation', async function() {
       let newQt = await Quotation.new();
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       actionHash = encode(
         'upgradeContract(bytes2,address)',
         'QT',
         newQt.address
       );
       await gvProp(29, actionHash, oldMR, oldGv, 2);
-      (await nxms.getLatestAddress('QT')).should.be.equal(newQt.address);
+      (await nxms.getLatestAddress(toHex('QT'))).should.be.equal(newQt.address);
     });
     it('1.25 should able to propose new contract code for claimsReward', async function() {
       let newCr = await ClaimsReward.new();
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       actionHash = encode(
         'upgradeContract(bytes2,address)',
         'CR',
         newCr.address
       );
       await gvProp(29, actionHash, oldMR, oldGv, 2);
-      (await nxms.getLatestAddress('CR')).should.be.equal(newCr.address);
+      (await nxms.getLatestAddress(toHex('CR'))).should.be.equal(newCr.address);
     });
     it('1.26 should able to propose new contract code for Pool1', async function() {
       let newP1 = await Pool1.new();
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       actionHash = encode(
         'upgradeContract(bytes2,address)',
         'P1',
         newP1.address
       );
       await gvProp(29, actionHash, oldMR, oldGv, 2);
-      (await nxms.getLatestAddress('P1')).should.be.equal(newP1.address);
+      (await nxms.getLatestAddress(toHex('P1'))).should.be.equal(newP1.address);
     });
     it('1.27 should able to propose new contract code for Pool2', async function() {
       let newP2 = await Pool2.new(factory.address);
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       actionHash = encode(
         'upgradeContract(bytes2,address)',
         'P2',
         newP2.address
       );
       await gvProp(29, actionHash, oldMR, oldGv, 2);
-      (await nxms.getLatestAddress('P2')).should.be.equal(newP2.address);
+      (await nxms.getLatestAddress(toHex('P2'))).should.be.equal(newP2.address);
     });
     it('1.28 should able to propose new contract code for mcr', async function() {
       let newMcr = await MCR.new();
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       actionHash = encode(
         'upgradeContract(bytes2,address)',
         'MC',
         newMcr.address
       );
       await gvProp(29, actionHash, oldMR, oldGv, 2);
-      (await nxms.getLatestAddress('MC')).should.be.equal(newMcr.address);
+      (await nxms.getLatestAddress(toHex('MC'))).should.be.equal(
+        newMcr.address
+      );
     });
     it('1.29 should not trigger action if passed invalid address', async function() {
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
-      let mcrOld = await nxms.getLatestAddress('MC');
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
+      let mcrOld = await nxms.getLatestAddress(toHex('MC'));
       actionHash = encode(
         'upgradeContract(bytes2,address)',
         'MC',
         ZERO_ADDRESS
       );
       await gvProp(29, actionHash, oldMR, oldGv, 2);
-      (await nxms.getLatestAddress('MC')).should.be.equal(mcrOld);
+      (await nxms.getLatestAddress(toHex('MC'))).should.be.equal(mcrOld);
     });
     it('1.30 should not trigger action if passed invalid contrcat code', async function() {
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
-      let mcrOld = await nxms.getLatestAddress('MC');
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
+      let mcrOld = await nxms.getLatestAddress(toHex('MC'));
       actionHash = encode(
         'upgradeContract(bytes2,address)',
         'P4',
@@ -414,12 +443,12 @@ contract('NXMaster', function([
   describe('more test cases', function() {
     it('1.24 revert in case of upgrade implementation by non governance contract', async function() {
       await assertRevert(
-        nxms.upgradeContractImplementation('TC', nxms.address)
+        nxms.upgradeContractImplementation(toHex('TC'), nxms.address)
       );
     });
 
     it('1.25 revert in case of applying EP directly', async function() {
-      await assertRevert(nxms.addEmergencyPause(true, 'AB'));
+      await assertRevert(nxms.addEmergencyPause(true, toHex('AB')));
     });
     it('1.26 even if passed by governance should not trigger action for wrong contrcat code', async function() {
       this.timeout(0);
@@ -428,13 +457,15 @@ contract('NXMaster', function([
         'AS',
         nxms.address
       );
-      let oldMR = await MemberRoles.at(await nxms.getLatestAddress('MR'));
-      let oldGv = await Governance.at(await nxms.getLatestAddress('GV'));
+      let oldMR = await MemberRoles.at(
+        await nxms.getLatestAddress(toHex('MR'))
+      );
+      let oldGv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
       // await oldGv.changeDependentContractAddress();
       await gvProp(5, actionHash, oldMR, oldGv, 1);
     });
     it('1.27 revert in case of upgrade contract by non governance contract', async function() {
-      await assertRevert(nxms.upgradeContract('TF', nxms.address));
+      await assertRevert(nxms.upgradeContract(toHex('TF'), nxms.address));
     });
   });
 });

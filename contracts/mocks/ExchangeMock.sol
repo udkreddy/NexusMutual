@@ -1,7 +1,7 @@
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 import "./FactoryMock.sol";
-import "../imports/openzeppelin-solidity/token/ERC20/ERC20.sol";
+import "../external/openzeppelin-solidity/token/ERC20/ERC20.sol";
 
 
 contract ExchangeMock {
@@ -14,12 +14,19 @@ contract ExchangeMock {
         factory = FactoryMock(factoryAddress);
     }
 
-    function () public payable {}
+    function recieveEther() public payable {
+
+    }
  
-    function sendEth(uint val) public {
+    function removeEther(uint val) public {
+        
         (msg.sender).transfer(val);
     }
 
+    function sendEther() public payable {
+        
+    }
+    
     function rateFactor() public view returns(uint256) {
         if (token.id() == 1) {
             return 10;
@@ -82,7 +89,7 @@ contract ExchangeMock {
         uint256 tokensSold,
         uint256 minEth,
         uint256 deadline,
-        address recipient
+        address payable recipient
     )
         public
         payable
@@ -201,13 +208,13 @@ contract ExchangeMock {
         returns (uint256)
     {
 
-        require((deadline >= block.timestamp && tokensSold > 0) && (minTokensBought > 0 && minEthBought > 0), "1");
-        require(exchangeAddress != address(this) && exchangeAddress != address(0), "1");
+        require((deadline >= block.timestamp && tokensSold > 0) && (minTokensBought > 0 && minEthBought > 0));
+        require(exchangeAddress != address(this) && exchangeAddress != address(0));
         // uint256 tokenReserve = token.balanceOf(address(this));
         uint256 ethBought = tokensSold/rateFactor();
         uint256 weiBought = (ethBought);
-        require(weiBought >= minEthBought, "3");
-        require(token.transferFrom(buyer, address(this), tokensSold), "4");
+        require(weiBought >= minEthBought);
+        require(token.transferFrom(buyer, address(this), tokensSold));
 
         
         
@@ -222,7 +229,7 @@ contract ExchangeMock {
         uint256 minEth,
         uint256 deadline,
         address buyer,
-        address recipient
+        address payable recipient
     )
         internal
         returns (uint256)

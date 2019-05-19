@@ -9,16 +9,18 @@
     GNU General Public License for more details.
   You should have received a copy of the GNU General Public License
     along with this program.  If not, see http://www.gnu.org/licenses/ */
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
-import "./imports/govblocks-protocol/interfaces/IProposalCategory.sol";
-import "./imports/govblocks-protocol/Governed.sol";
+import "./external/govblocks-protocol/interfaces/IProposalCategory.sol";
+import "./external/govblocks-protocol/Governed.sol";
 import "./Iupgradable.sol";
+import "./MemberRoles.sol";
 
 
 contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
 
-    bool internal constructorCheck;
+    bool public constructorCheck;
+    MemberRoles internal mr;
 
     struct CategoryStruct {
         uint memberRoleToVote;
@@ -52,16 +54,16 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
     /// @param _contractName name of contract to be called after proposal is accepted
     /// @param _incentives rewards to distributed after proposal is accepted
     function addCategory(
-        string _name, 
+        string calldata _name, 
         uint _memberRoleToVote,
         uint _majorityVotePerc, 
         uint _quorumPerc,
-        uint[] _allowedToCreateProposal,
+        uint[] calldata _allowedToCreateProposal,
         uint _closingTime,
-        string _actionHash,
+        string calldata _actionHash,
         address _contractAddress,
         bytes2 _contractName,
-        uint[] _incentives
+        uint[] calldata _incentives
     ) 
         external
         onlyAuthorizedToGovern 
@@ -86,7 +88,7 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
     }
 
     /// @dev gets category details
-    function category(uint _categoryId) external view returns(uint, uint, uint, uint, uint[], uint, uint) {
+    function category(uint _categoryId) external view returns(uint, uint, uint, uint, uint[] memory, uint, uint) {
         return(
             _categoryId,
             allCategory[_categoryId].memberRoleToVote,
@@ -144,7 +146,8 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
         "MS", 50, 15, 2, 0);
         _addInitialCategories("Burn Claims Assessor Bond", "QmezNJUF2BM5Nv9EMnsEKUmuqjvdySzvQFvhEdvFJbau3k", //8
         "TF", 80, 15, 1, 0);
-        _addInitialCategories("Pause Claim Assessor Voting for 3 days", "QmRBXh9NGoGV7U7tTurKPhL4bzvDc9n23QZYidELpBPVdg", "CD", 60, 15, 1, 0);
+        _addInitialCategories("Pause Claim Assessor Voting for 3 days", 
+        "QmRBXh9NGoGV7U7tTurKPhL4bzvDc9n23QZYidELpBPVdg", "CD", 60, 15, 1, 0);
         _addInitialCategories("Changes to Capital Model", "", "EX", 50, 15, 2, 60);
         _addInitialCategories("Changes to Pricing Model", "", "EX", 50, 15, 2, 60);
         _addInitialCategories("Withdraw funds to Pay for Support Services", 
@@ -183,7 +186,8 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
             "MS", 50, 15, 2, 60);
         _addInitialCategories("Update Owner Parameters", "QmTEmDA1ECmGPfh5x3co1GmjXQCp3zisUP6rnLQjWmW8nu", //28
             "MS", 50, 15, 3, 0);
-        _addInitialCategories("Release new smart contract code", "QmSStfVwXF1TzDPCseVtMydgdF1xmzqhMtfpUg9Btx7tUp", "MS", 50, 15, 2, 80);
+        _addInitialCategories("Release new smart contract code", "QmSStfVwXF1TzDPCseVtMydgdF1xmzqhMtfpUg9Btx7tUp", 
+        "MS", 50, 15, 2, 80);
         _addInitialCategories("Edit Currency Asset Address", "QmahwCzxmUX1QEjgczmA2NF4Nxtx839eRLCXbBFeFCm3cF",
         "PD", 50, 15, 3, 60);
         _addInitialCategories("Edit Currency Asset baseMin", "QmeFSwZ21d7XabxVc7eiNKbtfEXUuD8qQXkeHZ5To1vo4t",
@@ -194,7 +198,9 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
         constructorCheck = true;
     }
 
-    function changeDependentContractAddress() public {}
+    function changeDependentContractAddress() public {
+        mr = MemberRoles(ms.getLatestAddress("MR"));
+    }
 
     /**
      * @dev to change the master address
@@ -202,7 +208,7 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
      */
     function changeMasterAddress(address _masterAddress) public {
         if (masterAddress != address(0))
-            require(masterAddress == msg.sender || ms.isInternal(msg.sender));
+            require(masterAddress == msg.sender);
         masterAddress = _masterAddress;
         ms = INXMMaster(_masterAddress);
         nxMasterAddress = _masterAddress;
@@ -223,20 +229,21 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
     /// @param _incentives rewards to distributed after proposal is accepted
     function updateCategory(
         uint _categoryId, 
-        string _name, 
+        string memory _name, 
         uint _memberRoleToVote, 
         uint _majorityVotePerc, 
         uint _quorumPerc,
-        uint[] _allowedToCreateProposal,
+        uint[] memory _allowedToCreateProposal,
         uint _closingTime,
-        string _actionHash,
+        string memory _actionHash,
         address _contractAddress,
         bytes2 _contractName,
-        uint[] _incentives
+        uint[] memory _incentives
     )
         public
         onlyAuthorizedToGovern
-    { 
+    {
+        require(_verifyMemberRoles(_memberRoleToVote, _allowedToCreateProposal) == 0, "Invalid Role");
         allCategory[_categoryId].memberRoleToVote = _memberRoleToVote;
         allCategory[_categoryId].majorityVotePerc = _majorityVotePerc;
         allCategory[_categoryId].closingTime = _closingTime;
@@ -262,19 +269,20 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
     /// @param _contractName name of contract to be called after proposal is accepted
     /// @param _incentives rewards to distributed after proposal is accepted
     function _addCategory(
-        string _name, 
+        string memory _name, 
         uint _memberRoleToVote,
         uint _majorityVotePerc, 
         uint _quorumPerc,
-        uint[] _allowedToCreateProposal,
+        uint[] memory _allowedToCreateProposal,
         uint _closingTime,
-        string _actionHash,
+        string memory _actionHash,
         address _contractAddress,
         bytes2 _contractName,
-        uint[] _incentives
+        uint[] memory _incentives
     ) 
         internal
     {
+        require(_verifyMemberRoles(_memberRoleToVote, _allowedToCreateProposal) == 0, "Invalid Role");
         allCategory.push(
             CategoryStruct(
                 _memberRoleToVote,
@@ -292,6 +300,20 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
         emit Category(categoryId, _name, _actionHash);
     }
 
+    function _verifyMemberRoles(uint _memberRoleToVote, uint[] memory _allowedToCreateProposal) 
+    internal view returns(uint) { 
+        uint totalRoles = mr.totalRoles();
+        if (_memberRoleToVote >= totalRoles) {
+            return 1;
+        }
+        for (uint i = 0; i < _allowedToCreateProposal.length; i++) {
+            if (_allowedToCreateProposal[i] >= totalRoles) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
     /**
      * @dev to add the initial categories 
      * @param _name is category name
@@ -303,8 +325,8 @@ contract ProposalCategory is  Governed, IProposalCategory, Iupgradable {
      * @param _categoryABReq is majority percentage required by advisory board 
      */
     function _addInitialCategories(
-        string _name,
-        string _actionHash,
+        string memory _name,
+        string memory _actionHash,
         bytes2 _contractName,
         uint _majorityVotePerc, 
         uint _quorumPerc,

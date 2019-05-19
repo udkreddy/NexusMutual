@@ -1,6 +1,6 @@
 const Pool1 = artifacts.require('Pool1Mock');
 const Pool2 = artifacts.require('Pool2');
-const PoolData = artifacts.require('PoolData');
+const PoolData = artifacts.require('PoolDataMock');
 const NXMToken = artifacts.require('NXMToken');
 const TokenController = artifacts.require('TokenController');
 const TokenFunctions = artifacts.require('TokenFunctionMock');
@@ -13,12 +13,13 @@ const Quotation = artifacts.require('Quotation');
 const MCR = artifacts.require('MCR');
 const MemberRoles = artifacts.require('MemberRoles');
 const NXMaster = artifacts.require('NXMaster');
-const Governance = artifacts.require('GovernanceMock');
+const Governance = artifacts.require('Governance');
 const DAI = artifacts.require('MockDAI');
+const DSValue = artifacts.require('DSValueMock');
 
 const { assertRevert } = require('./utils/assertRevert');
 const { advanceBlock } = require('./utils/advanceToBlock');
-const { ether } = require('./utils/ether');
+const { ether, toHex, toWei } = require('./utils/ethTools');
 const { increaseTimeTo, duration } = require('./utils/increaseTime');
 const { latestTime } = require('./utils/latestTime');
 const gvProp = require('./utils/gvProposal.js').gvProposal;
@@ -32,12 +33,12 @@ const QE = '0xb24919181daead6635e613576ca11c5aa5a4e133';
 const PID = 0;
 const smartConAdd = '0xd0a6e6c54dbc68db5db3a091b171a77407ff7ccf';
 const coverPeriod = 61;
-const coverDetails = [1, 3362445813369838, 744892736679184, 7972408607];
+const coverDetails = [1, '3362445813369838', '744892736679184', '7972408607'];
 const v = 28;
 const r = '0x66049184fb1cf394862cca6c3b2a0c462401a671d0f2b20597d121e56768f90a';
 const s = '0x4c28c8f8ff0548dd3a41d7c75621940eb4adbac13696a2796e98a59691bf53ff';
 
-const coverDetailsDai = [5, 16812229066849188, 5694231991898, 7972408607];
+const coverDetailsDai = [5, '16812229066849188', '5694231991898', '7972408607'];
 const vrs_dai = [
   27,
   '0xdcaa177410672d90890f1c0a42a965b3af9026c04caedbce9731cb43827e8556',
@@ -60,6 +61,8 @@ let nxms;
 let mr;
 let pd;
 let gv;
+let dsv;
+const BN = web3.utils.BN;
 
 const BigNumber = web3.BigNumber;
 require('chai')
@@ -78,12 +81,14 @@ contract('Claim: Assessment', function([
   coverHolder,
   notMember
 ]) {
-  const P_18 = new BigNumber(1e18);
+  const P_18 = new BN(toWei(1).toString());
   const stakeTokens = ether(5);
   const tokens = ether(60);
   const validity = duration.days(30);
-  const UNLIMITED_ALLOWANCE = new BigNumber(2).pow(256).minus(1);
-  const BOOK_TIME = new BigNumber(duration.hours(13));
+  const UNLIMITED_ALLOWANCE = new BN((2).toString())
+    .pow(new BN((256).toString()))
+    .sub(new BN((1).toString()));
+  const BOOK_TIME = new BN(duration.hours(13).toString());
   let coverID;
   let closingTime;
   let minTime;
@@ -104,22 +109,23 @@ contract('Claim: Assessment', function([
     qt = await Quotation.deployed();
     mcr = await MCR.deployed();
     nxms = await NXMaster.deployed();
-    tc = await TokenController.at(await nxms.getLatestAddress('TC'));
+    tc = await TokenController.at(await nxms.getLatestAddress(toHex('TC')));
     mr = await MemberRoles.at(await nxms.getLatestAddress('0x4d52'));
-    gv = await Governance.at(await nxms.getLatestAddress('GV'));
+    gv = await Governance.at(await nxms.getLatestAddress(toHex('GV')));
     p2 = await Pool2.deployed();
     cad = await DAI.deployed();
+    dsv = await DSValue.deployed();
     await mr.addMembersBeforeLaunch([], []);
     (await mr.launched()).should.be.equal(true);
     await mcr.addMCRData(
       18000,
-      100 * 1e18,
-      2 * 1e18,
+      toWei(100),
+      toWei(2),
       ['0x455448', '0x444149'],
       [100, 65407],
       20181011
     );
-    (await pd.capReached()).should.be.bignumber.equal(1);
+    (await pd.capReached()).toString().should.be.equal((1).toString());
     // await mr.payJoiningFee(owner, { from: owner, value: fee });
     // await mr.kycVerdict(owner, true);
     await mr.payJoiningFee(member1, { from: member1, value: fee });
@@ -166,17 +172,17 @@ contract('Claim: Assessment', function([
             await tc.lock(CLA, tokens, validity, {
               from: member3
             });
-            coverDetails[4] = 7972408607001;
+            coverDetails[4] = '7972408607001';
             var vrsdata = await getQuoteValues(
               coverDetails,
-              'ETH',
+              toHex('ETH'),
               coverPeriod,
               smartConAdd,
               qt.address
             );
             await P1.makeCoverBegin(
               smartConAdd,
-              'ETH',
+              toHex('ETH'),
               coverDetails,
               coverPeriod,
               vrsdata[0],
@@ -184,17 +190,17 @@ contract('Claim: Assessment', function([
               vrsdata[2],
               { from: coverHolder, value: coverDetails[1] }
             );
-            coverDetails[4] = 7972408607002;
+            coverDetails[4] = '7972408607002';
             vrsdata = await getQuoteValues(
               coverDetails,
-              'ETH',
+              toHex('ETH'),
               coverPeriod,
               smartConAdd,
               qt.address
             );
             await P1.makeCoverBegin(
               smartConAdd,
-              'ETH',
+              toHex('ETH'),
               coverDetails,
               coverPeriod,
               vrsdata[0],
@@ -206,14 +212,18 @@ contract('Claim: Assessment', function([
             await cl.submitClaim(coverID[0], { from: coverHolder });
             const minVotingTime = await cd.minVotingTime();
             const now = await latestTime();
-            minTime = minVotingTime.plus(now);
+            minTime = new BN(minVotingTime.toString()).add(
+              new BN(now.toString())
+            );
             await cl.getClaimFromNewStart(0, { from: member1 });
             await cl.getUserClaimByIndex(0, { from: coverHolder });
             await cl.getClaimbyIndex(1, { from: coverHolder });
             claimId = (await cd.actualClaimLength()) - 1;
           });
           it('8.1 voting should be open', async function() {
-            (await cl.checkVoteClosing(claimId)).should.be.bignumber.equal(0);
+            (await cl.checkVoteClosing(claimId))
+              .toString()
+              .should.be.equal((0).toString());
           });
           it('8.2 should let claim assessors to vote for claim assessment', async function() {
             let initialCAVoteTokens = await cd.getCaClaimVotesToken(claimId);
@@ -239,11 +249,15 @@ contract('Claim: Assessment', function([
             );
           });
           it('8.5 should close voting after min time', async function() {
-            await increaseTimeTo(minTime.plus(2));
-            (await cl.checkVoteClosing(claimId)).should.be.bignumber.equal(1);
+            await increaseTimeTo(
+              new BN(minTime.toString()).add(new BN((2).toString()))
+            );
+            (await cl.checkVoteClosing(claimId))
+              .toString()
+              .should.be.equal((1).toString());
           });
           it('8.6 should not able to vote after voting close', async function() {
-            await assertRevert(cl.submitCAVote(claimId, 1, { member1 }));
+            await assertRevert(cl.submitCAVote(claimId, 1, { from: member1 }));
           });
           it('8.7 should be able to change claim status', async function() {
             let APIID = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
@@ -251,10 +265,12 @@ contract('Claim: Assessment', function([
             APIID = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
             await P1.__callback(APIID, '');
             const newCStatus = await cd.getClaimStatusNumber(claimId);
-            newCStatus[1].should.be.bignumber.equal(6);
+            newCStatus[1].toString().should.be.equal((6).toString());
           });
           it('8.8 voting should be closed', async function() {
-            (await cl.checkVoteClosing(claimId)).should.be.bignumber.equal(-1);
+            (await cl.checkVoteClosing(claimId))
+              .toString()
+              .should.be.equal((-1).toString());
           });
         });
 
@@ -264,7 +280,9 @@ contract('Claim: Assessment', function([
           let priceinEther;
           before(async function() {
             const now = await latestTime();
-            await increaseTimeTo(BOOK_TIME.plus(now));
+            await increaseTimeTo(
+              new BN(BOOK_TIME.toString()).add(new BN(now.toString()))
+            );
             coverID = await qd.getAllCoversOfUser(coverHolder);
             await cl.submitClaim(coverID[1], { from: coverHolder });
             claimId = (await cd.actualClaimLength()) - 1;
@@ -294,8 +312,12 @@ contract('Claim: Assessment', function([
           it('8.10 should not able to vote after voting closed', async function() {
             const now = await latestTime();
             const maxVotingTime = await cd.maxVotingTime();
-            closingTime = maxVotingTime.plus(now);
-            await increaseTimeTo(closingTime.plus(6));
+            closingTime = new BN(maxVotingTime.toString()).add(
+              new BN(now.toString())
+            );
+            await increaseTimeTo(
+              new BN(closingTime.toString()).add(new BN((6).toString()))
+            );
             await assertRevert(cl.submitCAVote(claimId, 1, { from: member1 }));
           });
           it('8.11 orcalise call should be able to change claim status', async function() {
@@ -303,10 +325,12 @@ contract('Claim: Assessment', function([
             priceinEther = await mcr.calculateTokenPrice(CA_ETH);
             await P1.__callback(apiid, '');
             const newCStatus = await cd.getClaimStatusNumber(claimId);
-            newCStatus[1].should.be.bignumber.equal(7);
+            newCStatus[1].toString().should.be.equal((7).toString());
           });
           it('8.12 voting should be closed', async function() {
-            (await cl.checkVoteClosing(claimId)).should.be.bignumber.equal(-1);
+            (await cl.checkVoteClosing(claimId))
+              .toString()
+              .should.be.equal((-1).toString());
           });
         });
       });
@@ -316,25 +340,35 @@ contract('Claim: Assessment', function([
           await cl.submitClaim(coverID[0], { from: coverHolder });
           claimId = (await cd.actualClaimLength()) - 1;
           const now = await latestTime();
-          closingTime = maxVotingTime.plus(now);
-          await increaseTimeTo(closingTime.plus(2));
+          closingTime = new BN(maxVotingTime.toString()).add(
+            new BN(now.toString())
+          );
+          await increaseTimeTo(
+            new BN(closingTime.toString()).add(new BN((2).toString()))
+          );
         });
         it('8.14 oracalise call should open voting for members after CA voting time expires', async function() {
           let apiid = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
           await P1.__callback(apiid, '');
           const newCStatus = await cd.getClaimStatusNumber(claimId);
-          newCStatus[1].should.be.bignumber.equal(3);
+          newCStatus[1].toString().should.be.equal((3).toString());
         });
         describe('Member not voted', function() {
           before(async function() {
             const now = await latestTime();
-            closingTime = maxVotingTime.plus(now);
-            await increaseTimeTo(closingTime.plus(2));
+            closingTime = new BN(maxVotingTime.toString()).add(
+              new BN(now.toString())
+            );
+            await increaseTimeTo(
+              new BN(closingTime.toString()).add(new BN((2).toString()))
+            );
             claimId = (await cd.actualClaimLength()) - 1;
           });
           describe('After Member vote closing time', function() {
             it('8.15 should close voting ', async function() {
-              (await cl.checkVoteClosing(claimId)).should.be.bignumber.equal(1);
+              (await cl.checkVoteClosing(claimId))
+                .toString()
+                .should.be.equal((1).toString());
             });
             it('8.16 oracalise call should change claim status ', async function() {
               let apiid = await pd.allAPIcall(
@@ -342,29 +376,29 @@ contract('Claim: Assessment', function([
               );
               await P1.__callback(apiid, '');
               const newCStatus = await cd.getClaimStatusNumber(claimId);
-              newCStatus[1].should.be.bignumber.equal(11);
+              newCStatus[1].toString().should.be.equal((11).toString());
             });
             it('8.17 voting should be closed', async function() {
-              (await cl.checkVoteClosing(claimId)).should.be.bignumber.equal(
-                -1
-              );
+              (await cl.checkVoteClosing(claimId))
+                .toString()
+                .should.be.equal((-1).toString());
             });
           });
         });
 
         describe('Member rejects claim', function() {
           before(async function() {
-            coverDetails[4] = 7972408607003;
+            coverDetails[4] = '7972408607003';
             var vrsdata = await getQuoteValues(
               coverDetails,
-              'ETH',
+              toHex('ETH'),
               coverPeriod,
               smartConAdd,
               qt.address
             );
             await P1.makeCoverBegin(
               smartConAdd,
-              'ETH',
+              toHex('ETH'),
               coverDetails,
               coverPeriod,
               vrsdata[0],
@@ -376,8 +410,12 @@ contract('Claim: Assessment', function([
             await cl.submitClaim(coverID[2], { from: coverHolder });
             claimId = (await cd.actualClaimLength()) - 1;
             const now = await latestTime();
-            closingTime = maxVotingTime.plus(now);
-            await increaseTimeTo(closingTime.plus(2));
+            closingTime = new BN(maxVotingTime.toString()).add(
+              new BN(now.toString())
+            );
+            await increaseTimeTo(
+              new BN(closingTime.toString()).add(new BN((2).toString()))
+            );
             let apiid = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
             await P1.__callback(apiid, '');
             await cd.getAllClaimsByAddress(coverHolder);
@@ -394,7 +432,7 @@ contract('Claim: Assessment', function([
             let claimed1 = await cr.getRewardAndClaimedStatus(0, 0, {
               from: member1
             });
-            await cr.claimAllPendingReward([], { from: member1 });
+            await cr.claimAllPendingReward(20, { from: member1 });
             claimed[1].should.be.equal(false);
             await cl.getClaimFromNewStart(0, { from: member1 });
             await cl.getClaimFromNewStart(1, { from: member1 });
@@ -428,8 +466,12 @@ contract('Claim: Assessment', function([
           });
           it('8.22 should not able to vote after voting closed', async function() {
             const now = await latestTime();
-            closingTime = maxVotingTime.plus(now);
-            await increaseTimeTo(closingTime.plus(2));
+            closingTime = new BN(maxVotingTime.toString()).add(
+              new BN(now.toString())
+            );
+            await increaseTimeTo(
+              new BN(closingTime.toString()).add(new BN((2).toString()))
+            );
             await assertRevert(
               cl.submitMemberVote(claimId, -1, { from: member1 })
             );
@@ -438,7 +480,7 @@ contract('Claim: Assessment', function([
             let apiid = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
             await P1.__callback(apiid, '');
             const newCStatus = await cd.getClaimStatusNumber(claimId);
-            newCStatus[1].should.be.bignumber.equal(9);
+            newCStatus[1].toString().should.be.equal((9).toString());
             // await cd.updateState12Count(claimId, 1);
             // await cr.getRewardAndClaimedStatus(0, claimId, { from: member1 });
             // await cr.getRewardToBeDistributedByUser(member1);
@@ -450,8 +492,12 @@ contract('Claim: Assessment', function([
             await cl.submitClaim(coverID[2], { from: coverHolder });
             claimId = (await cd.actualClaimLength()) - 1;
             let now = await latestTime();
-            closingTime = maxVotingTime.plus(now);
-            await increaseTimeTo(closingTime.plus(2));
+            closingTime = new BN(maxVotingTime.toString()).add(
+              new BN(now.toString())
+            );
+            await increaseTimeTo(
+              new BN(closingTime.toString()).add(new BN((2).toString()))
+            );
             let apiid = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
             await P1.__callback(apiid, '');
             // await cd.getAllClaimsByAddress(coverHolder);
@@ -473,12 +519,16 @@ contract('Claim: Assessment', function([
 
           it('8.25 should change claim status', async function() {
             const now = await latestTime();
-            closingTime = maxVotingTime.plus(now);
-            await increaseTimeTo(closingTime.plus(2));
+            closingTime = new BN(maxVotingTime.toString()).add(
+              new BN(now.toString())
+            );
+            await increaseTimeTo(
+              new BN(closingTime.toString()).add(new BN((2).toString()))
+            );
             let apiid = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
             await P1.__callback(apiid, '');
             const newCStatus = await cd.getClaimStatusNumber(claimId);
-            newCStatus[1].should.be.bignumber.equal(8);
+            newCStatus[1].toString().should.be.equal((8).toString());
             // await cd.updateState12Count(claimId, 1);
             // await cr.getRewardAndClaimedStatus(0, claimId, { from: member1 });
             // await cr.getRewardToBeDistributedByUser(member1);
@@ -490,17 +540,17 @@ contract('Claim: Assessment', function([
 
   describe('Member not locked tokens for Claim Assessment', function() {
     before(async function() {
-      coverDetails[4] = 7972408607004;
+      coverDetails[4] = '7972408607004';
       var vrsdata = await getQuoteValues(
         coverDetails,
-        'ETH',
+        toHex('ETH'),
         coverPeriod,
         smartConAdd,
         qt.address
       );
       await P1.makeCoverBegin(
         smartConAdd,
-        'ETH',
+        toHex('ETH'),
         coverDetails,
         coverPeriod,
         vrsdata[0],
@@ -516,9 +566,11 @@ contract('Claim: Assessment', function([
     it('8.27 CSA should not change while ExpireCover if cover status is 1', async function() {
       const now = await latestTime();
       await increaseTimeTo(now + 62 * 24 * 3600);
-      let CSA = await qd.getTotalSumAssured('ETH');
+      let CSA = await qd.getTotalSumAssured(toHex('ETH'));
       await qt.expireCover(coverID[1]);
-      CSA.should.be.bignumber.equal(await qd.getTotalSumAssured('ETH'));
+      CSA.toString().should.be.equal(
+        (await qd.getTotalSumAssured(toHex('ETH'))).toString()
+      );
     });
   });
 
@@ -528,17 +580,17 @@ contract('Claim: Assessment', function([
       await mr.kycVerdict(member4, true);
       await tk.approve(tc.address, UNLIMITED_ALLOWANCE, { from: member4 });
       await tk.transfer(member4, ether(400));
-      coverDetails[4] = 7972408607005;
+      coverDetails[4] = '7972408607005';
       var vrsdata = await getQuoteValues(
         coverDetails,
-        'ETH',
+        toHex('ETH'),
         coverPeriod,
         smartConAdd,
         qt.address
       );
       await P1.makeCoverBegin(
         smartConAdd,
-        'ETH',
+        toHex('ETH'),
         coverDetails,
         coverPeriod,
         vrsdata[0],
@@ -548,7 +600,9 @@ contract('Claim: Assessment', function([
       );
       coverID = await qd.getAllCoversOfUser(coverHolder);
       let now = await latestTime();
-      await increaseTimeTo(BOOK_TIME.plus(now));
+      await increaseTimeTo(
+        new BN(BOOK_TIME.toString()).add(new BN(now.toString()))
+      );
       await cl.submitClaim(coverID[coverID.length - 1], { from: coverHolder });
       let clid = (await cd.actualClaimLength()) - 1;
       await tc.lock(CLA, ether(400), duration.days(300), {
@@ -560,7 +614,7 @@ contract('Claim: Assessment', function([
       await increaseTimeTo(now / 1 + maxVoteTime / 1 + 10);
     });
     it('8.28 Payout fails', async function() {
-      await tf.upgradeCapitalPool(member2);
+      await tf.upgradeCapitalPool(DAI.address);
       let clid = (await cd.actualClaimLength()) - 1;
       let apiid = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
       await P1.__callback(apiid, '');
@@ -568,7 +622,7 @@ contract('Claim: Assessment', function([
       (12).should.be.equal(parseFloat(cStatus[1]));
     });
     it('8.29 Retry Payout 60 times and should not take action from 61st attempt', async function() {
-      await tf.upgradeCapitalPool(member2);
+      await tf.upgradeCapitalPool(DAI.address);
       let apiid;
       let clid = (await cd.actualClaimLength()) - 1;
       let payOutRetry = await cd.payoutRetryTime();
@@ -588,8 +642,7 @@ contract('Claim: Assessment', function([
       parseFloat(check).should.be.equal(-1);
       let cStatus = await cd.getClaimStatusNumber(clid);
       (13).should.be.equal(parseFloat(cStatus[1]));
-      await P1.sendTransaction({ from: owner, value: 10 * 1e18 });
-      console.log(await pd.getApiIdTypeOf(apiid));
+      await P1.sendEther({ from: owner, value: toWei(10) });
       await P1.__callback(apiid, '');
       cStatus = await cd.getClaimStatusNumber(clid);
       coverID = await qd.getAllCoversOfUser(coverHolder);
@@ -598,21 +651,21 @@ contract('Claim: Assessment', function([
       (13).should.be.equal(parseFloat(cStatus[1]));
     });
     it('8.30 Payout fails for 1st time and later complete', async function() {
-      await cad.transfer(coverHolder, 20 * 1e18);
+      await cad.transfer(coverHolder, toWei(20));
       await cad.approve(P1.address, coverDetailsDai[1], {
         from: coverHolder
       });
       coverDetailsDai[4] = 7972408607006;
       var vrsdata = await getQuoteValues(
         coverDetailsDai,
-        'DAI',
+        toHex('DAI'),
         coverPeriod,
         smartConAdd,
         qt.address
       );
       await P1.makeCoverUsingCA(
         smartConAdd,
-        'DAI',
+        toHex('DAI'),
         coverDetailsDai,
         coverPeriod,
         vrsdata[0],
@@ -632,7 +685,7 @@ contract('Claim: Assessment', function([
       await P1.__callback(apiid, '');
       cStatus = await cd.getClaimStatusNumber(clid);
       (12).should.be.equal(parseFloat(cStatus[1]));
-      await cad.transfer(P1.address, 20 * 1e18);
+      await cad.transfer(P1.address, toWei(20));
       apiid = await pd.allAPIcall((await pd.getApilCallLength()) - 1);
       await P1.__callback(apiid, '');
       cStatus = await cd.getClaimStatusNumber(clid);
@@ -650,17 +703,17 @@ contract('Claim: Assessment', function([
       await tc.lock(CLA, ether(200), duration.days(300), {
         from: member5
       });
-      coverDetails[4] = 7972408607007;
+      coverDetails[4] = '7972408607007';
       var vrsdata = await getQuoteValues(
         coverDetails,
-        'ETH',
+        toHex('ETH'),
         coverPeriod,
         smartConAdd,
         qt.address
       );
       await P1.makeCoverBegin(
         smartConAdd,
-        'ETH',
+        toHex('ETH'),
         coverDetails,
         coverPeriod,
         vrsdata[0],
@@ -679,10 +732,10 @@ contract('Claim: Assessment', function([
       await assertRevert(cd.setUserClaimVotePausedOn(member1));
     });
     it('8.33 should not be able to update uint parameter directly', async function() {
-      await assertRevert(cd.updateUintParameters('A', 12));
+      await assertRevert(cd.updateUintParameters(toHex('A'), 12));
     });
     it('8.34 should get 0 for wrong code', async function() {
-      let val = await cd.getUintParameters('EPTIME');
+      let val = await cd.getUintParameters(toHex('EPTIME'));
       (val[1] / 1).should.be.equal(0);
     });
     it('8.35 even if passed by governance should not trigger action for wrong code', async function() {
@@ -709,7 +762,9 @@ contract('Claim: Assessment', function([
       await cl.submitCAVote(clid, -1, { from: member5 });
       tokenVoted = await cd.getTokensClaim(member5, clid);
       parseFloat(tokenVoted[1]).should.be.equal(parseFloat(ether(200)));
-      (await cl.checkVoteClosing(clid)).should.be.bignumber.equal(-1);
+      (await cl.checkVoteClosing(clid))
+        .toString()
+        .should.be.equal((-1).toString());
     });
 
     it('8.39 should close voting during casting vote as Member', async function() {
@@ -725,16 +780,18 @@ contract('Claim: Assessment', function([
       let minVoteTime = await cd.minVotingTime();
       await increaseTimeTo(now / 1 + minVoteTime / 1 + 10);
       await cl.submitMemberVote(clid, -1, { from: member5 });
-      (await cl.checkVoteClosing(clid)).should.be.bignumber.equal(-1);
+      (await cl.checkVoteClosing(clid))
+        .toString()
+        .should.be.equal((-1).toString());
     });
     it('8.40 should revert while selling NXMs', async function() {
-      await assertRevert(P1.sellNXMTokens(2 * 1e18, { from: member5 }));
+      await assertRevert(P1.sellNXMTokens(toWei(2), { from: member5 }));
     });
     it('8.41 should handle if commissionToBePaid is 0', async function() {
       await P1.updateStakerCommissions(smartConAdd, 0);
     });
     it('8.41 should handle if burnNXMAmount is 0', async function() {
-      await P1.burnStakerLockedToken(1, 'ETH', 0);
+      await P1.burnStakerLockedToken(1, toHex('ETH'), 0);
     });
   });
 });

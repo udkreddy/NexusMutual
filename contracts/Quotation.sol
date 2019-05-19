@@ -13,7 +13,7 @@
   You should have received a copy of the GNU General Public License
     along with this program.  If not, see http://www.gnu.org/licenses/ */
 
-pragma solidity 0.4.24;
+pragma solidity 0.5.7;
 
 import "./QuotationData.sol";
 import "./TokenFunctions.sol";
@@ -46,9 +46,7 @@ contract Quotation is Iupgradable {
         _;
         locked = false;
     }
-
-    function () public payable {} //solhint-disable-line
-
+    
     /**
      * @dev Iupgradable Interface to update dependent contract address
      */
@@ -61,6 +59,10 @@ contract Quotation is Iupgradable {
         p1 = Pool1(ms.getLatestAddress("P1"));
         pd = PoolData(ms.getLatestAddress("PD"));
         mr = MemberRoles(ms.getLatestAddress("MR"));
+    }
+
+    function sendEther() public payable {
+        
     }
 
     /**
@@ -109,7 +111,7 @@ contract Quotation is Iupgradable {
      * @param smartCAdd Smart Contract Address
      */ 
     function makeCoverUsingNXMTokens(
-        uint[] coverDetails,
+        uint[] memory coverDetails,
         uint16 coverPeriod,
         bytes4 coverCurr,
         address smartCAdd,
@@ -131,10 +133,10 @@ contract Quotation is Iupgradable {
      * @param scAddress Smart Contract Address
      */
     function verifyCoverDetails(
-        address from,
+        address payable from,
         address scAddress,
         bytes4 coverCurr,
-        uint[] coverDetails,
+        uint[] memory coverDetails,
         uint16 coverPeriod,
         uint8 _v,
         bytes32 _r,
@@ -165,7 +167,7 @@ contract Quotation is Iupgradable {
      * @param _s argument from vrs hash.
      */ 
     function verifySign(
-        uint[] coverDetails,
+        uint[] memory coverDetails,
         uint16 coverPeriod,
         bytes4 curr,
         address smaratCA,
@@ -190,7 +192,7 @@ contract Quotation is Iupgradable {
      * @param smaratCA smarat contract address.
      */ 
     function getOrderHash(
-        uint[] coverDetails,
+        uint[] memory coverDetails,
         uint16 coverPeriod,
         bytes4 curr,
         address smaratCA
@@ -256,7 +258,7 @@ contract Quotation is Iupgradable {
     function initiateMembershipAndCover(
         address smartCAdd,
         bytes4 coverCurr,
-        uint[] coverDetails,
+        uint[] memory coverDetails,
         uint16 coverPeriod,
         uint8 _v,
         bytes32 _r,
@@ -286,18 +288,11 @@ contract Quotation is Iupgradable {
     }
 
     /**
-     * @dev to get the full refund 
-     */
-    function fullRefund() public checkPause noReentrancy {
-        _kycTrigger(false, msg.sender);
-    }
-
-    /**
      * @dev to get the verdict of kyc process 
      * @param status is the kyc status
      * @param _add is the address of member
      */
-    function kycVerdict(bool status, address _add) public checkPause noReentrancy {
+    function kycVerdict(address _add, bool status) public checkPause noReentrancy {
         require(msg.sender == qd.kycAuthAddress());
         _kycTrigger(status, _add);
     }
@@ -309,15 +304,17 @@ contract Quotation is Iupgradable {
         uint amount = address(this).balance;
         IERC20 erc20;
         if (amount > 0) {
-            newAdd.transfer(amount);   
+            // newAdd.transfer(amount);   
+            Quotation newQT = Quotation(newAdd);
+            newQT.sendEther.value(amount)();
         }
         uint currAssetLen = pd.getAllCurrenciesLen();
         for (uint64 i = 1; i < currAssetLen; i++) {
             bytes4 currName = pd.getCurrenciesByIndex(i);
             address currAddr = pd.getCurrencyAssetAddress(currName);
             erc20 = IERC20(currAddr); //solhint-disable-line
-            if (erc20.balanceOf(this) > 0) {
-                require(erc20.transfer(newAdd, erc20.balanceOf(this)));
+            if (erc20.balanceOf(address(this)) > 0) {
+                require(erc20.transfer(newAdd, erc20.balanceOf(address(this))));
             }
         }
     }
@@ -330,10 +327,10 @@ contract Quotation is Iupgradable {
      */  
 
     function _makeCover ( //solhint-disable-line
-        address from,
+        address payable from,
         address scAddress,
         bytes4 coverCurr,
-        uint[] coverDetails,
+        uint[] memory coverDetails,
         uint16 coverPeriod
     )
         internal
@@ -361,10 +358,10 @@ contract Quotation is Iupgradable {
      * @param scAddress Smart Contract Address
      */  
     function _verifyCoverDetails(
-        address from,
+        address payable from,
         address scAddress,
         bytes4 coverCurr,
-        uint[] coverDetails,
+        uint[] memory coverDetails,
         uint16 coverPeriod,
         uint8 _v,
         bytes32 _r,
@@ -403,7 +400,7 @@ contract Quotation is Iupgradable {
 
         uint holdedCoverLen = qd.getUserHoldedCoverLength(_add).sub(1);
         uint holdedCoverID = qd.getUserHoldedCoverByIndex(_add, holdedCoverLen);
-        address userAdd;
+        address payable userAdd;
         address scAddress;
         bytes4 coverCurr;
         uint16 coverPeriod;
@@ -422,7 +419,7 @@ contract Quotation is Iupgradable {
                 qd.setHoldedCoverIDStatus(holdedCoverID, uint(QuotationData.HCIDStatus.kycPass));
                 address poolAdd = ms.getLatestAddress("P1");
                 if (coverCurr == "ETH") {
-                    poolAdd.transfer(coverDetails[1]);
+                    p1.sendEther.value(coverDetails[1])();
                 } else {
                     erc20 = IERC20(pd.getCurrencyAssetAddress(coverCurr)); //solhint-disable-line
                     require(erc20.transfer(poolAdd, coverDetails[1]));
